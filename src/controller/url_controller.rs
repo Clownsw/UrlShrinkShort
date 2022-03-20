@@ -1,6 +1,7 @@
+use tide::Redirect;
 use tide::Request;
 
-use crate::dao::urls_dao::insert_url;
+use crate::dao::urls_dao::{insert_url, select_by_name, select_by_target};
 use crate::pojo::msg::Msg;
 use crate::pojo::url::InsertUrl;
 use crate::util::global_util::rand_hex_str;
@@ -19,25 +20,46 @@ pub async fn create_url(mut req: Request<State>) -> tide::Result {
     let mut msg = Msg::new();
 
     if !body.is_empty() {
-        let hex_str = rand_hex_str().await;
-        let hex_str_clone = hex_str.clone();
+        let r = select_by_target(&req.state().db_pool, &body).await;
 
-        let url = InsertUrl {
-            url_name: hex_str,
-            url_target: body,
-            url_time: Utc::now(),
-        };
+        match r {
+            Ok(v) => {
+                let local_url_ref = LOCAL_URL.lock().unwrap();
+                msg.code = 200;
+                msg.message = format!("{}{}", *local_url_ref, v.url_name);
+            }
+            Err(_) => {
+                let hex_str = rand_hex_str().await;
+                let hex_str_clone = hex_str.clone();
 
-        let result = insert_url(&req.state().db_pool, &url).await;
-        println!("rows_affected = {}", result.rows_affected());
+                let url = InsertUrl {
+                    url_name: hex_str,
+                    url_target: body,
+                    url_time: Utc::now(),
+                };
 
-        if result.rows_affected() > 0 {
-            let local_url_ref = LOCAL_URL.lock().unwrap();
+                let result = insert_url(&req.state().db_pool, &url).await;
+                println!("rows_affected = {}", result.rows_affected());
 
-            msg.code = 200;
-            msg.message = format!("{}{}", *local_url_ref, hex_str_clone);
+                if result.rows_affected() > 0 {
+                    let local_url_ref = LOCAL_URL.lock().unwrap();
+
+                    msg.code = 200;
+                    msg.message = format!("{}t/{}", *local_url_ref, hex_str_clone);
+                }
+            }
         }
     }
 
     Ok(serde_json::to_string(&msg).unwrap().into())
+}
+
+pub async fn redirect_target(req: Request<State>) -> tide::Result {
+    match req.param("target") {
+        Ok(v) => match select_by_name(&req.state().db_pool, &v.to_string()).await {
+            Ok(v) => Ok(Redirect::new(v.url_target).into()),
+            Err(_) => Ok("error".into()),
+        },
+        Err(_) => Ok("error".into()),
+    }
 }

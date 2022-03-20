@@ -15,8 +15,7 @@ use std::sync::Mutex;
 
 use tide_fluent_routes::prelude::*;
 
-use controller::hello_controller::{hello, test_redirect};
-use controller::url_controller::create_url;
+use controller::url_controller::{create_url, redirect_target};
 
 lazy_static! {
     pub static ref LOCAL_URL: Mutex<String> = Mutex::new(String::new());
@@ -55,9 +54,8 @@ async fn main() {
 
     app.register(
         root()
-            .at("/hello/:name", |route| route.get(hello))
-            .at("/test", |route| route.get(test_redirect))
-            .at("/api/create", |route| route.post(create_url)),
+            .at("/api/create", |route| route.post(create_url))
+            .at("/t/:target", |route| route.get(redirect_target)),
     );
 
     app.listen("127.0.0.1:8888").await.unwrap();
