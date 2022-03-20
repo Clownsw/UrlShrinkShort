@@ -1,12 +1,13 @@
 use tide::Redirect;
 use tide::Request;
 
-use crate::dao::urls_dao::{insert_url, select_by_name, select_by_target};
+use crate::dao::urls_dao::{delete_by_id, insert_url, select_by_name, select_by_target};
 use crate::pojo::msg::Msg;
 use crate::pojo::url::InsertUrl;
 use crate::util::global_util::rand_hex_str;
 use crate::State;
 use crate::LOCAL_URL;
+use chrono::Duration;
 use chrono::Utc;
 
 pub async fn create_url(mut req: Request<State>) -> tide::Result {
@@ -35,7 +36,7 @@ pub async fn create_url(mut req: Request<State>) -> tide::Result {
                 let url = InsertUrl {
                     url_name: hex_str,
                     url_target: body,
-                    url_time: Utc::now(),
+                    url_time: Utc::now().checked_add_signed(Duration::days(1)).unwrap(),
                 };
 
                 let result = insert_url(&req.state().db_pool, &url).await;
@@ -57,8 +58,15 @@ pub async fn create_url(mut req: Request<State>) -> tide::Result {
 pub async fn redirect_target(req: Request<State>) -> tide::Result {
     match req.param("target") {
         Ok(v) => match select_by_name(&req.state().db_pool, &v.to_string()).await {
-            Ok(v) => Ok(Redirect::new(v.url_target).into()),
-            Err(_) => Ok("error".into()),
+            Ok(v) => {
+                if v.url_time.timestamp_millis() < Utc::now().timestamp_millis() {
+                    delete_by_id(&req.state().db_pool, v.url_id).await;
+                    return Ok("time expired!".into());
+                }
+
+                Ok(Redirect::new(v.url_target).into())
+            }
+            Err(_) => Ok("not found!".into()),
         },
         Err(_) => Ok("error".into()),
     }

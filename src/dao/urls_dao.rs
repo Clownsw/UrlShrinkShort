@@ -45,3 +45,15 @@ pub async fn insert_url(db_pool: &MySqlPool, url: &InsertUrl) -> MySqlQueryResul
     .await
     .unwrap()
 }
+
+pub async fn delete_by_id(db_pool: &MySqlPool, id: i64) -> MySqlQueryResult {
+    sqlx::query!(
+        r#"
+            DELETE FROM urls WHERE url_id = ?
+        "#,
+        id
+    )
+    .execute(db_pool)
+    .await
+    .unwrap()
+}
