@@ -1,5 +1,7 @@
 use tide::Redirect;
 use tide::Request;
+use tide::Response;
+use tide::StatusCode;
 
 use crate::dao::urls_dao::{delete_by_id, insert_url, select_by_name, select_by_target};
 use crate::pojo::msg::Msg;
@@ -11,12 +13,14 @@ use chrono::Duration;
 use chrono::Utc;
 
 pub async fn create_url(mut req: Request<State>) -> tide::Result {
-    let body = match req.body_string().await {
+    let mut body = match req.body_string().await {
         Ok(v) => v,
         Err(_) => "".to_string(),
     };
 
-    println!("body = {}", body);
+    body = body.trim().to_string();
+
+    println!("=================body = {}", body);
 
     let mut msg = Msg::new();
 
@@ -27,7 +31,7 @@ pub async fn create_url(mut req: Request<State>) -> tide::Result {
             Ok(v) => {
                 let local_url_ref = LOCAL_URL.lock().unwrap();
                 msg.code = 200;
-                msg.message = format!("{}{}", *local_url_ref, v.url_name);
+                msg.message = format!("{}t/{}", *local_url_ref, v.url_name);
             }
             Err(_) => {
                 let hex_str = rand_hex_str().await;
@@ -52,7 +56,11 @@ pub async fn create_url(mut req: Request<State>) -> tide::Result {
         }
     }
 
-    Ok(serde_json::to_string(&msg).unwrap().into())
+    let mut resp = Response::new(StatusCode::Ok);
+    resp.set_body(serde_json::to_string(&msg).unwrap());
+    resp.insert_header("Access-Control-Allow-Origin", "*");
+
+    Ok(resp)
 }
 
 pub async fn redirect_target(req: Request<State>) -> tide::Result {
